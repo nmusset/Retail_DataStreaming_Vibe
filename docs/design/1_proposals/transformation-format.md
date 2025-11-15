@@ -59,7 +59,7 @@ This decision impacts:
 
 **1B: .NET 10 File-Based Apps (.cs)** ⭐ NEW
 - Uses regular `.cs` files with `dotnet run`
-- Native .NET 10+ feature (Preview 4+)
+- Native .NET 10+ feature (GA)
 - No separate scripting syntax required
 - First-class CLI integration
 
@@ -167,9 +167,9 @@ dotnet project convert transformation.cs
 - ❌ **Limited IDE support**: Not all features available
 
 **1B (.NET 10+) Specific**:
-- ❌ **Platform requirement**: Requires .NET 10+ (not GA until Nov 2025)
+- ❌ **Platform requirement**: Requires .NET 10+ (released November 2025)
 - ❌ **Process overhead**: Each execution spawns new process
-- ❌ **Early adoption risk**: Feature still in preview, API may change
+- ❌ **Adoption considerations**: Newer technology, production track record building
 
 #### Industry Examples
 
@@ -462,7 +462,8 @@ graph TD
 3. **Production-grade quality**: Compile-time validation, unit testing, debugging
 4. **Manageable platform complexity**: Well-documented .NET plugin patterns
 5. **Clear upgrade path**: Can add containers later if isolation requirements grow
-6. **Platform compatibility**: Works with any .NET version (no .NET 10 requirement)
+6. **Platform compatibility**: Works with any .NET version
+7. **Proven stability**: Mature .NET plugin patterns with extensive ecosystem
 
 ### Alternative for Rapid Prototyping: **Option 1B - .NET 10 File-Based Apps**
 
@@ -473,8 +474,8 @@ graph TD
 - Learning/onboarding new functional developers
 
 **Cautions**:
-- ⚠️ Requires .NET 10+ (GA: November 2025)
-- ⚠️ Feature still in preview, may have breaking changes
+- ⚠️ Requires .NET 10+ (released November 2025)
+- ⚠️ Newer technology with evolving best practices
 - ⚠️ Process-per-execution overhead may impact high-throughput scenarios
 - ⚠️ Less suitable for complex transformations with many dependencies
 
