@@ -33,17 +33,21 @@ This decision impacts:
 | Persona | Requirement |
 |---------|-------------|
 | **Client** | No database performance degradation, transparent operations |
+| **Functional Dev** | Clear observability, ability to validate data capture locally |
+| **Functional QA** | Test CDC behavior in staging environment, production parity |
 | **Platform Team** | Reliable capture mechanism, multi-vendor support, operational simplicity |
-| **Platform QA** | Testable, predictable behavior, production parity |
+| **Platform QA** | Automated testing, regression coverage, backward compatibility validation |
 | **Product Owner** | Scalable solution, supports multiple clients/databases |
 
 ### Must Avoid
 
+- **Platform coupling** that prevents functional team from testing transformations independently
+- **Opaque failures** where CDC issues are unclear to functional developers
+- **Breaking changes** to CDC format that invalidate existing transformations
+- **Test environment drift** between staging and production CDC behavior
+- **Monitoring blind spots** where CDC failures go undetected
 - Database performance degradation affecting client operations
-- Data loss or inconsistency
 - Vendor lock-in to specific database or cloud platforms
-- Complex setup requiring deep database expertise
-- Single points of failure
 
 ---
 
@@ -366,7 +370,9 @@ await foreach (var (header, binlogEvent) in client.Replicate())
 - ✅ **Lower latency**: Direct stream from database to platform (milliseconds)
 - ✅ **Simpler deployment**: .NET service + database, no middleware
 - ✅ **Cloud-agnostic**: Works on-premise or any cloud
-- ✅ **Team expertise**: Leverages .NET skills
+- ✅ **Team expertise**: Leverages existing .NET skills
+- ✅ **Local testing**: Functional devs can run CDC locally with Docker databases
+- ✅ **Transparent debugging**: Full .NET stack traces and logging
 
 #### Cons
 
@@ -686,18 +692,23 @@ while (true)
 ### Phase 3: Reliability & Observability (Week 5-6)
 
 1. **Error handling**:
-   - Retry transient failures
+   - Retry transient failures with exponential backoff
    - Dead letter queue for unprocessable events
    - Circuit breaker for database unavailability
+   - Clear error messages for functional team debugging
 
-2. **Monitoring**:
-   - Metrics: events captured/sec, lag behind database
-   - Alerts: CDC service down, checkpoint not advancing
-   - Logging: Structured logs with correlation IDs
+2. **Monitoring & Observability**:
+   - **Metrics**: Events captured/sec, lag behind database, checkpoint age
+   - **Alerts**: CDC service down, checkpoint not advancing, lag threshold exceeded
+   - **Logging**: Structured logs with correlation IDs, change event details
+   - **Developer dashboard**: Real-time CDC health per client/table
 
-3. **Testing**:
-   - Integration tests with database containers
-   - Chaos testing (kill service mid-stream, verify no data loss)
+3. **Testing Strategy**:
+   - **Functional QA**: Docker Compose with database + CDC service for isolated testing
+   - **Platform QA**: Automated regression suite validating CDC across database versions
+   - **Integration tests**: Database containers simulating real change patterns
+   - **Chaos testing**: Kill service mid-stream, verify no data loss, checkpoint recovery
+   - **Performance benchmarks**: Validate CDC handles expected throughput (e.g., 1000 changes/sec)
 
 ### Phase 4: Additional Databases (Week 7+)
 
@@ -715,14 +726,18 @@ while (true)
 2. **Change volume**: What's the expected changes/sec per database?
    - **Validation**: Load testing to ensure .NET libraries can handle volume
 
-3. **Downtime tolerance**: Can CDC service be down for minutes without data loss?
-   - **Mitigation**: Database-level CDC buffers changes (SQL Server: up to retention period)
+3. **Functional team testing**: How do functional devs test transformations with real CDC events?
+   - **Solution**: Provide Docker Compose templates with database + CDC service
+   - **Documentation**: Sample CDC event payloads for unit testing
 
-4. **Multi-tenancy**: Will single CDC service handle multiple client databases?
+4. **Platform QA regression coverage**: How to test CDC doesn't break existing transformations?
+   - **Strategy**: Catalog of representative CDC events, automated replay tests
+
+5. **Backward compatibility**: What if CDC event format changes (e.g., library upgrade)?
+   - **Mitigation**: Version CDC events, maintain compatibility layer
+
+6. **Multi-tenancy**: Will single CDC service handle multiple client databases?
    - **Architecture**: One service instance per database vs. multi-tenant service
-
-5. **Kafka investment**: Is team willing to invest in Kafka expertise?
-   - **Decision factor**: If no, Option 2; if yes, consider Option 1
 
 ---
 
