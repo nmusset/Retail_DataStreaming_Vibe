@@ -48,56 +48,153 @@ This decision impacts:
 
 ### Option 1: C# Scripts (Runtime Compilation)
 
-**Description**: Functional team delivers `.csx` files or C# code as text. Platform compiles at runtime using Roslyn compiler.
+**Description**: Functional team delivers C# code as plain text files. Platform executes using runtime compilation or direct file execution.
+
+#### Two Sub-Approaches
+
+**1A: Traditional C# Scripting (.csx)**
+- Uses `.csx` files with Roslyn scripting API
+- Available in all .NET versions
+- Established tooling and community support
+
+**1B: .NET 10 File-Based Apps (.cs)** ⭐ NEW
+- Uses regular `.cs` files with `dotnet run`
+- Native .NET 10+ feature (Preview 4+)
+- No separate scripting syntax required
+- First-class CLI integration
 
 ```mermaid
-graph LR
-    DEV[Developer] -->|Writes| SCRIPT[.csx Script]
-    SCRIPT -->|Deploys| PLATFORM[Platform]
-    PLATFORM -->|Roslyn Compiler| ASSEMBLY[In-Memory Assembly]
-    ASSEMBLY -->|Executes| RESULT[Transformation Result]
+graph TB
+    DEV[Developer] -->|Writes| CHOICE{Approach?}
     
-    style SCRIPT fill:#e1f5ff
-    style PLATFORM fill:#ffe1ff
-    style ASSEMBLY fill:#fff4e1
+    CHOICE -->|1A: Traditional| CSX[.csx Script]
+    CHOICE -->|1B: .NET 10+| CS[.cs File]
+    
+    CSX -->|Deploys| PLATFORM1[Platform]
+    CS -->|Deploys| PLATFORM2[Platform]
+    
+    PLATFORM1 -->|Roslyn Scripting API| ASSEMBLY1[In-Memory Assembly]
+    PLATFORM2 -->|dotnet run --file| PROCESS[Process Execution]
+    
+    ASSEMBLY1 -->|Executes| RESULT1[Transformation Result]
+    PROCESS -->|Executes| RESULT2[Transformation Result]
+    
+    style CSX fill:#e1f5ff
+    style CS fill:#e1ffe1
+    style PLATFORM1 fill:#ffe1ff
+    style PLATFORM2 fill:#ffe1ff
+    style ASSEMBLY1 fill:#fff4e1
+    style PROCESS fill:#fff4e1
 ```
 
-#### Technology Stack
+#### Technology Stack Comparison
 
-| Component | Technology | Purpose |
-|-----------|------------|---------|
-| **Script Format** | C# Script (`.csx`) | Source code delivery |
-| **Compiler** | [Roslyn (Microsoft.CodeAnalysis)](https://github.com/dotnet/roslyn) | Runtime compilation |
-| **Execution** | In-process via compiled assembly | Direct method invocation |
-| **Sandboxing** | [AssemblyLoadContext](https://learn.microsoft.com/en-us/dotnet/api/system.runtime.loader.assemblyloadcontext) | Isolation between transformations |
+| Component | 1A: Traditional (.csx) | 1B: .NET 10+ (.cs) |
+|-----------|------------------------|---------------------|
+| **Script Format** | C# Script (`.csx`) | Regular C# (`.cs`) |
+| **Execution** | [Roslyn Scripting API](https://github.com/dotnet/roslyn/wiki/Scripting-API-Samples) | `dotnet run --file` CLI |
+| **Compilation** | In-memory via Roslyn | Built-in .NET SDK |
+| **NuGet Support** | External references | `#:package` directive |
+| **SDK Selection** | N/A | `#:sdk` directive |
+| **IDE Support** | Limited | Full (VS Code C# DevKit) |
+| **Conversion Path** | Manual | `dotnet project convert` |
+
+#### Example: .NET 10 File-Based App
+
+```csharp
+// transformation.cs - A simple transformation
+#:package Newtonsoft.Json@13.0.3
+
+using Newtonsoft.Json;
+
+var input = Console.In.ReadToEnd();
+var data = JsonConvert.DeserializeObject<Dictionary<string, object>>(input);
+
+// Transform data
+data["processed"] = true;
+data["timestamp"] = DateTime.UtcNow;
+
+Console.WriteLine(JsonConvert.SerializeObject(data));
+```
+
+**Execution**:
+```bash
+# Local development
+dotnet run transformation.cs
+
+# Platform execution
+dotnet run --file /transformations/client-abc/transformation.cs
+```
+
+**File-Level Directives** (.NET 10+):
+- `#:package <name>@<version>` - Reference NuGet packages inline
+- `#:sdk <SDK>` - Specify SDK (e.g., `Microsoft.NET.Sdk.Web`)
+- `#:property <NAME> <VALUE>` - Set MSBuild properties
+- `#!/usr/bin/dotnet run` - Shebang for Unix executability
+
+**Conversion to Project**:
+```bash
+dotnet project convert transformation.cs
+# Creates: transformation/transformation.csproj + Program.cs
+```
 
 #### Pros
 
+**Both Approaches**:
 - ✅ **Fastest iteration**: No build step, immediate deployment
 - ✅ **Transparent**: Source code visible in production for debugging
 - ✅ **Lightweight**: No binaries to manage
 - ✅ **Version control friendly**: Plain text in git
-- ✅ **Hot reload potential**: Recompile without platform restart
+
+**1B (.NET 10+) Additional Pros**:
+- ✅ **Native tooling**: Built into .NET SDK, no external dependencies
+- ✅ **Full IDE support**: IntelliSense, debugging in VS Code C# DevKit
+- ✅ **Inline dependencies**: `#:package` directives for NuGet packages
+- ✅ **Seamless upgrade path**: `dotnet project convert` to full project
+- ✅ **Cross-platform scripts**: Shebang support for Unix/Linux
+- ✅ **No dialect gap**: Regular C# syntax, not scripting subset
 
 #### Cons
 
-- ❌ **Performance overhead**: Compilation on first execution (can be mitigated with caching)
+**Both Approaches**:
 - ❌ **Security risk**: Unrestricted code execution if not sandboxed properly
-- ❌ **Limited testing parity**: Local script runner needed to match platform behavior
-- ❌ **Dependency management**: NuGet packages harder to handle (requires external references)
-- ❌ **Debugging complexity**: Harder to attach debugger to runtime-compiled code
+- ❌ **Limited testing parity**: Local environment needs to match platform
+
+**1A (.csx) Specific**:
+- ❌ **Performance overhead**: Compilation on first execution
+- ❌ **Dependency management**: External references complex
+- ❌ **Debugging complexity**: Harder to attach debugger
+- ❌ **Limited IDE support**: Not all features available
+
+**1B (.NET 10+) Specific**:
+- ❌ **Platform requirement**: Requires .NET 10+ (not GA until Nov 2025)
+- ❌ **Process overhead**: Each execution spawns new process
+- ❌ **Early adoption risk**: Feature still in preview, API may change
 
 #### Industry Examples
 
-- **Azure Functions** (C# Script support)
+**Traditional Scripting**:
+- **Azure Functions** (C# Script support with `.csx`)
 - **LINQPad** (C# scripting environment)
 - **Jupyter .NET Interactive** (C# notebooks)
 
+**.NET 10 File-Based Apps**:
+- **DevOps automation** (replacing Bash/PowerShell scripts)
+- **CI/CD utilities** (GitHub Actions with .cs files)
+- **Database seeding** (one-off data population scripts)
+- **API prototyping** (Minimal APIs in single files)
+
 #### Open-Source References
 
-- [Roslyn Scripting API](https://github.com/dotnet/roslyn/wiki/Scripting-API-Samples)
+**Traditional Scripting**:
+- [Roslyn Scripting API](https://github.com/dotnet/roslyn/wiki/Scripting-API-Samples) - Official Roslyn scripting
 - [dotnet-script](https://github.com/dotnet-script/dotnet-script) - Execute C# scripts from CLI
 - [CS-Script](https://github.com/oleg-shilo/cs-script) - Advanced C# scripting engine
+
+**.NET 10 File-Based Apps**:
+- [Official Announcement](https://devblogs.microsoft.com/dotnet/announcing-dotnet-run-app/) - Microsoft DevBlogs
+- [dotnet run Documentation](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-run) - `--file` option
+- [File-Based Programs Guide](https://learn.microsoft.com/en-us/dotnet/csharp/fundamentals/tutorials/file-based-programs) - Tutorial
 
 ---
 
@@ -298,20 +395,28 @@ Content-Type: application/json
 
 ## Comparison Matrix
 
-| Criteria | Scripts | Binaries | Containers |
-|----------|---------|----------|------------|
-| **Local Dev Experience** | ⭐⭐⭐ (simple runner) | ⭐⭐⭐⭐⭐ (full IDE) | ⭐⭐⭐⭐ (Docker Desktop) |
-| **Production Performance** | ⭐⭐⭐ (cache compiled) | ⭐⭐⭐⭐⭐ (AOT possible) | ⭐⭐⭐ (network latency) |
-| **Deployment Speed** | ⭐⭐⭐⭐⭐ (instant) | ⭐⭐⭐ (build pipeline) | ⭐⭐ (image build/push) |
-| **Isolation/Security** | ⭐⭐ (needs sandboxing) | ⭐⭐⭐ (AssemblyLoadContext) | ⭐⭐⭐⭐⭐ (container runtime) |
-| **Platform Complexity** | ⭐⭐⭐ (Roslyn integration) | ⭐⭐ (plugin loading) | ⭐ (orchestration) |
-| **Debugging** | ⭐⭐ (runtime code) | ⭐⭐⭐⭐⭐ (attach debugger) | ⭐⭐⭐ (remote debug) |
-| **Dependency Management** | ⭐⭐ (manual refs) | ⭐⭐⭐⭐⭐ (NuGet) | ⭐⭐⭐⭐ (Dockerfile COPY) |
-| **Versioning/Rollback** | ⭐⭐⭐ (file versions) | ⭐⭐⭐⭐ (NuGet versions) | ⭐⭐⭐⭐⭐ (image tags) |
-| **Resource Efficiency** | ⭐⭐⭐⭐ (shared process) | ⭐⭐⭐⭐⭐ (shared process) | ⭐⭐ (per-container overhead) |
-| **Test Parity** | ⭐⭐ (needs harness) | ⭐⭐⭐⭐⭐ (same DLL) | ⭐⭐⭐⭐⭐ (same image) |
+| Criteria | Scripts (.csx) | Scripts (.cs/.NET 10) | Binaries | Containers |
+|----------|----------------|----------------------|----------|------------|
+| **Local Dev Experience** | ⭐⭐⭐ (simple runner) | ⭐⭐⭐⭐⭐ (native dotnet) | ⭐⭐⭐⭐⭐ (full IDE) | ⭐⭐⭐⭐ (Docker Desktop) |
+| **Production Performance** | ⭐⭐⭐ (cache compiled) | ⭐⭐⭐ (process spawn) | ⭐⭐⭐⭐⭐ (AOT possible) | ⭐⭐⭐ (network latency) |
+| **Deployment Speed** | ⭐⭐⭐⭐⭐ (instant) | ⭐⭐⭐⭐⭐ (instant) | ⭐⭐⭐ (build pipeline) | ⭐⭐ (image build/push) |
+| **Isolation/Security** | ⭐⭐ (needs sandboxing) | ⭐⭐ (process isolation) | ⭐⭐⭐ (AssemblyLoadContext) | ⭐⭐⭐⭐⭐ (container runtime) |
+| **Platform Complexity** | ⭐⭐⭐ (Roslyn integration) | ⭐⭐⭐⭐ (CLI invocation) | ⭐⭐ (plugin loading) | ⭐ (orchestration) |
+| **Debugging** | ⭐⭐ (runtime code) | ⭐⭐⭐⭐ (VS Code attach) | ⭐⭐⭐⭐⭐ (attach debugger) | ⭐⭐⭐ (remote debug) |
+| **Dependency Management** | ⭐⭐ (manual refs) | ⭐⭐⭐⭐ (#:package) | ⭐⭐⭐⭐⭐ (NuGet) | ⭐⭐⭐⭐ (Dockerfile COPY) |
+| **Versioning/Rollback** | ⭐⭐⭐ (file versions) | ⭐⭐⭐ (file versions) | ⭐⭐⭐⭐ (NuGet versions) | ⭐⭐⭐⭐⭐ (image tags) |
+| **Resource Efficiency** | ⭐⭐⭐⭐ (shared process) | ⭐⭐⭐ (per-execution) | ⭐⭐⭐⭐⭐ (shared process) | ⭐⭐ (per-container overhead) |
+| **Test Parity** | ⭐⭐ (needs harness) | ⭐⭐⭐⭐ (same file) | ⭐⭐⭐⭐⭐ (same DLL) | ⭐⭐⭐⭐⭐ (same image) |
+| **Upgrade Path** | ⭐ (manual rewrite) | ⭐⭐⭐⭐⭐ (dotnet convert) | ⭐⭐⭐ (already compiled) | ⭐⭐⭐ (already containerized) |
+| **.NET Version Requirement** | Any | .NET 10+ | Any | Any |
 
 **Legend**: ⭐ Poor → ⭐⭐⭐⭐⭐ Excellent
+
+**Key Differentiators**:
+- **Scripts (.cs/.NET 10)**: Best for rapid iteration with modern .NET
+- **Scripts (.csx)**: Best for compatibility across .NET versions
+- **Binaries**: Best for production-grade, compile-time validated code
+- **Containers**: Best for maximum isolation and polyglot future
 
 ---
 
@@ -349,7 +454,7 @@ graph TD
 
 ## Recommendations
 
-### Recommended: **Option 2 - Compiled Binaries (NuGet Packages)**
+### Primary Recommendation: **Option 2 - Compiled Binaries (NuGet Packages)**
 
 **Rationale**:
 1. **Best alignment with .NET expertise**: Functional team already knows this workflow
@@ -357,6 +462,52 @@ graph TD
 3. **Production-grade quality**: Compile-time validation, unit testing, debugging
 4. **Manageable platform complexity**: Well-documented .NET plugin patterns
 5. **Clear upgrade path**: Can add containers later if isolation requirements grow
+6. **Platform compatibility**: Works with any .NET version (no .NET 10 requirement)
+
+### Alternative for Rapid Prototyping: **Option 1B - .NET 10 File-Based Apps**
+
+**When to Consider**:
+- Quick experiments or proof-of-concepts
+- One-off data migrations or seeding scripts
+- Developer productivity tools
+- Learning/onboarding new functional developers
+
+**Cautions**:
+- ⚠️ Requires .NET 10+ (GA: November 2025)
+- ⚠️ Feature still in preview, may have breaking changes
+- ⚠️ Process-per-execution overhead may impact high-throughput scenarios
+- ⚠️ Less suitable for complex transformations with many dependencies
+
+**Migration Path**: Start with file-based apps, use `dotnet project convert` when ready to graduate to Option 2.
+
+### Decision Framework
+
+```mermaid
+graph TD
+    START{Transformation Complexity?} -->|Simple, Low Volume| SCRIPTS[Option 1B: File-Based Apps]
+    START -->|Production, High Volume| BINARY[Option 2: Compiled Binaries]
+    START -->|Extreme Isolation Needed| CONTAINER[Option 3: Containers]
+    
+    SCRIPTS -->|Grows Complex| CONVERT[dotnet project convert]
+    CONVERT --> BINARY
+    
+    BINARY -->|Multi-Language Required| CONTAINER
+    
+    style BINARY fill:#e1ffe1
+    style SCRIPTS fill:#fff4e1
+    style CONTAINER fill:#e1f5ff
+```
+
+**Decision Criteria**:
+
+| Factor | File-Based Apps (1B) | Binaries (2) | Containers (3) |
+|--------|---------------------|--------------|----------------|
+| Transformation Complexity | Low | Medium-High | Any |
+| Expected Throughput | < 100/min | < 10K/min | Unlimited |
+| Security Requirements | Standard | High | Maximum |
+| Team .NET Maturity | Learning | Proficient | Expert |
+| Time to First Deployment | Hours | Days | Weeks |
+| Infrastructure Availability | Any | Any | Kubernetes/Docker |
 
 ### Implementation Phases
 
