@@ -10,7 +10,7 @@
 
 The platform requires a reliable mechanism to capture database changes in real-time and stream them to the transformation pipeline. The solution must:
 
-1. **Capture data changes** (INSERT, UPDATE, DELETE) from client databases
+1. **Capture data changes** (INSERT, UPDATE, DELETE) from source databases
 2. **Minimize performance impact** on source databases
 3. **Guarantee data consistency** and ordering
 4. **Support multiple database vendors** (SQL Server, PostgreSQL, MySQL, etc.)
@@ -46,7 +46,7 @@ This decision impacts:
 - **Breaking changes** to CDC format that invalidate existing transformations
 - **Test environment drift** between staging and production CDC behavior
 - **Monitoring blind spots** where CDC failures go undetected
-- Database performance degradation affecting client operations
+- Database performance degradation affecting application operations
 - Vendor lock-in to specific database or cloud platforms
 
 ---
@@ -736,7 +736,7 @@ while (true)
 5. **Backward compatibility**: What if CDC event format changes (e.g., library upgrade)?
    - **Mitigation**: Version CDC events, maintain compatibility layer
 
-6. **Multi-tenancy**: Will single CDC service handle multiple client databases?
+6. **Multi-tenancy**: Will single CDC service handle multiple databases?
    - **Architecture**: One service instance per database vs. multi-tenant service
 
 ---

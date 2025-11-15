@@ -12,7 +12,7 @@ This document provides a high-level architectural blueprint for the Retail Data 
 
 ```mermaid
 graph LR
-    DB[(Client Database<br/>Tickets, Products,<br/>Catalog, Stores)] -->|Delta Changes| PLATFORM[Data Streaming<br/>Platform]
+    DB[(Source Database<br/>Tickets, Products,<br/>Catalog, Stores)] -->|Delta Changes| PLATFORM[Data Streaming<br/>Platform]
     PLATFORM -->|Transformed Data| ENDPOINT1[Client Endpoint 1]
     PLATFORM -->|Transformed Data| ENDPOINT2[Client Endpoint 2]
     PLATFORM -->|Transformed Data| ENDPOINT3[Client Endpoint N]

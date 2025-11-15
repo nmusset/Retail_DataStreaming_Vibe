@@ -1,14 +1,14 @@
 # Retail Data Streaming Platform
 
-An ETL platform that captures database changes from retail client systems, applies client-specific transformations, and delivers data reliably to external endpoints.
+An ETL platform that captures database changes from source databases, applies client-specific transformations, and delivers data reliably to external endpoints.
 
 ## Overview
 
-This platform enables retail clients to stream operational data (tickets, products, catalog, stores) from their databases to external systems with minimal technical overhead. The platform handles change data capture (CDC), transformation execution, and delivery guarantees independently per client.
+This platform enables retail clients to stream operational data (tickets, products, catalog, stores) to external systems with minimal technical overhead. Source databases are part of applications provided to clients, hosted on our premises. The platform handles change data capture (CDC), transformation execution, and delivery guarantees independently per client.
 
 ## Key Capabilities
 
-- **Change Data Capture**: Monitors client databases for delta changes
+- **Change Data Capture**: Monitors source databases for delta changes
 - **Custom Transformations**: Executes client-specific data transformation logic
 - **Reliable Delivery**: Ensures accurate data delivery to configured endpoints
 - **Client Isolation**: Independent operation per client with no cross-contamination
