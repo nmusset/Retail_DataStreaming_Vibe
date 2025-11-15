@@ -36,7 +36,7 @@ This decision impacts:
 | **Functional Dev** | Ability to test workflow execution locally, clear error visibility |
 | **Functional QA** | Test complete workflows end-to-end, production-like staging environment |
 | **Platform Team** | Simple POC deployment, scalable architecture, operational manageability |
-| **Platform QA** | Automated testing of background jobs, regression coverage, health monitoring |
+| **Platform QA** | Automated testing of background jobs, regression coverage, staging environment parity, performance benchmarks |
 | **Product Owner** | Fast time-to-market for POC, predictable scaling path, cost control |
 
 ### Must Avoid
@@ -47,6 +47,8 @@ This decision impacts:
 - **Environment drift** between local development, staging, and production
 - **Operational burden** requiring dedicated DevOps team from day one
 - **Brittle scheduling** that fails under load or network issues
+- **Test environment unavailability** preventing functional QA from validating workflows
+- **Untestable background jobs** that can't be validated in automated test suites
 
 ---
 
@@ -954,6 +956,7 @@ spec:
 | **Operational Complexity** | ⭐⭐⭐⭐⭐ (minimal) | ⭐⭐⭐⭐ (add database) | ⭐⭐⭐⭐ (add database) | ⭐⭐ (K8s complexity) |
 | **Resource Efficiency** | ⭐⭐⭐⭐⭐ (lightweight) | ⭐⭐⭐⭐ (polling overhead) | ⭐⭐⭐⭐ (polling overhead) | ⭐⭐⭐ (pod overhead) |
 | **Debugging Experience** | ⭐⭐⭐⭐⭐ (attach debugger) | ⭐⭐⭐⭐ (logs + dashboard) | ⭐⭐⭐⭐ (logs + listeners) | ⭐⭐⭐ (distributed logs) |
+| **Automated Testing** | ⭐⭐⭐⭐⭐ (integration tests) | ⭐⭐⭐⭐⭐ (in-memory storage) | ⭐⭐⭐⭐ (test scheduler) | ⭐⭐⭐ (test cluster) |
 | **Cloud-Agnostic** | ⭐⭐⭐⭐⭐ (fully) | ⭐⭐⭐⭐⭐ (fully) | ⭐⭐⭐⭐⭐ (fully) | ⭐⭐⭐⭐⭐ (fully) |
 | **High Availability** | ⭐ (single process) | ⭐⭐⭐⭐ (multi-server) | ⭐⭐⭐⭐⭐ (clustering) | ⭐⭐⭐⭐⭐ (K8s replicas) |
 | **Learning Curve** | ⭐⭐⭐⭐⭐ (simple) | ⭐⭐⭐⭐ (straightforward) | ⭐⭐⭐ (moderate) | ⭐⭐ (K8s steep) |
@@ -1150,6 +1153,162 @@ graph TB
 
 ---
 
+## Testing Strategy
+
+### Functional QA Testing
+
+**Local Testing (Docker Compose)**:
+```yaml
+# docker-compose.test.yml - For functional QA
+services:
+  test-platform:
+    build: .
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Testing
+      - ConnectionStrings__PlatformDb=Server=test-db;Database=TestPlatform;...
+    depends_on:
+      - test-db
+      - test-hangfire
+
+  test-db:
+    image: postgres:16
+    environment:
+      - POSTGRES_DB=TestPlatform
+
+  test-hangfire:
+    build: .
+    environment:
+      - Hangfire__Storage=InMemory  # Fast test execution
+    ports:
+      - "5050:5000"  # Access dashboard during testing
+```
+
+**Integration Test Example**:
+```csharp
+public class WorkflowExecutionTests : IClassFixture<PlatformTestFixture>
+{
+    [Fact]
+    public async Task CdcCapture_EnqueuesTransformationJobs()
+    {
+        // Arrange: Insert test data into source database
+        await InsertTestTicket(new Ticket { Id = 123, Amount = 100.0m });
+        
+        // Act: Trigger CDC capture
+        await TriggerCdcCapture();
+        
+        // Assert: Verify job enqueued in Hangfire
+        var enqueuedJobs = await GetEnqueuedJobs();
+        Assert.Contains(enqueuedJobs, j => j.Type == "TransformationJob" && j.Args.Contains("123"));
+    }
+
+    [Fact]
+    public async Task BackgroundJob_RetriesOnTransientFailure()
+    {
+        // Arrange: Configure transformation to fail first attempt
+        ConfigureTransientFailure(attemptCount: 1);
+        
+        // Act: Enqueue job and wait for retry
+        var jobId = EnqueueJob();
+        await WaitForJobCompletion(jobId, timeout: TimeSpan.FromSeconds(30));
+        
+        // Assert: Job succeeded on retry
+        var jobState = await GetJobState(jobId);
+        Assert.Equal(JobStatus.Succeeded, jobState.Status);
+        Assert.Equal(2, jobState.AttemptCount); // Failed once, succeeded on retry
+    }
+}
+```
+
+### Platform QA Regression Testing
+
+**Regression Test Suite**:
+```csharp
+public class PlatformRegressionTests
+{
+    // Test that platform updates don't break existing workflows
+    [Theory]
+    [MemberData(nameof(GetActiveWorkflowConfigurations))]
+    public async Task ExistingWorkflow_StillExecutesSuccessfully(WorkflowConfig config)
+    {
+        // Load historical workflow configuration
+        var workflow = await LoadWorkflow(config);
+        
+        // Execute workflow with test data
+        var result = await ExecuteWorkflow(workflow, testData);
+        
+        // Assert: Workflow completes without errors
+        Assert.True(result.Success, $"Workflow {config.Name} failed: {result.Error}");
+        Assert.Equal(config.ExpectedOutputSchema, result.OutputSchema);
+    }
+
+    // Test performance benchmarks
+    [Fact]
+    public async Task BackgroundJobs_MeetPerformanceBenchmarks()
+    {
+        // Arrange: Load 100 concurrent workflows
+        var workflows = Enumerable.Range(1, 100).Select(i => CreateTestWorkflow(i));
+        
+        // Act: Execute all workflows
+        var stopwatch = Stopwatch.StartNew();
+        await Task.WhenAll(workflows.Select(w => ExecuteWorkflow(w)));
+        stopwatch.Stop();
+        
+        // Assert: All complete within 5 minutes
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromMinutes(5),
+            $"Workflows took {stopwatch.Elapsed.TotalMinutes:F2} minutes (threshold: 5 min)");
+    }
+
+    public static IEnumerable<object[]> GetActiveWorkflowConfigurations()
+    {
+        // Load all production workflows for regression testing
+        var workflowCatalog = LoadWorkflowCatalog();
+        return workflowCatalog.Select(w => new object[] { w });
+    }
+}
+```
+
+**Staging Environment Parity**:
+- **Database**: Use same database engine and version as production (PostgreSQL 16)
+- **Job Storage**: Same Hangfire storage backend (SQL Server/PostgreSQL, not in-memory)
+- **Configuration**: Load production-equivalent settings (connection strings sanitized)
+- **Monitoring**: Same health checks, metrics, logging as production
+- **Data Volume**: Representative dataset size (minimum 10% of production scale)
+
+**Continuous Regression Validation**:
+```yaml
+# .github/workflows/regression-tests.yml
+name: Platform Regression Tests
+
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Start Test Environment
+        run: docker-compose -f docker-compose.test.yml up -d
+      
+      - name: Run Regression Suite
+        run: dotnet test --filter "Category=Regression" --logger "trx"
+      
+      - name: Performance Benchmarks
+        run: dotnet test --filter "Category=Performance" --logger "trx"
+      
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results
+          path: '**/*.trx'
+```
+
+---
+
 ## Decision Framework
 
 ```mermaid
@@ -1197,11 +1356,13 @@ graph TD
 2. **High availability**: Can platform tolerate brief downtime for updates?
    - **Impact**: Single Worker Service sufficient or need clustering/K8s
 
-3. **Functional team testing**: How do functional devs test jobs locally?
-   - **Solution**: Docker Compose with Hangfire dashboard for local development
+3. **Functional QA testing**: How do functional testers validate complete workflows?
+   - **Solution**: Docker Compose test environment with Hangfire dashboard, integration test fixtures
 
-4. **Platform QA regression**: How to test background jobs don't break?
-   - **Strategy**: Automated integration tests running against Hangfire test storage
+4. **Platform QA regression**: How to ensure platform updates don't break existing workflows?
+   - **Strategy**: Automated regression suite testing catalog of active workflows, performance benchmarks
+   - **Environment**: Staging environment with production parity (same DB, same storage, same config)
+   - **Coverage**: Test suite includes all client workflow configurations and transformation types
 
 5. **Monitoring integration**: Existing monitoring stack (Prometheus, Datadog, etc.)?
    - **Implementation**: Custom metrics exporters for chosen execution environment
