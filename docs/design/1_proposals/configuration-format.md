@@ -73,10 +73,12 @@ This decision impacts:
 
 **Description**: Use YAML for workflow definitions with JSON Schema validation. YAML provides human-readable syntax with advanced features like anchors, multi-line strings, and comments.
 
+**Note**: JSON Schema validates JSON data structures, not YAML syntax directly. The validation process converts YAML to JSON (since YAML is a superset of JSON), then validates the resulting JSON structure against the schema. This is the standard approach used by tools like Kubernetes.
+
 ```mermaid
 graph LR
     DEV[Developer] -->|Writes| YAML[workflow.yaml]
-    YAML -->|Validates Against| SCHEMA[JSON Schema]
+    YAML -->|Converts to JSON| SCHEMA[JSON Schema]
     SCHEMA -->|Pass| GIT[Version Control]
     GIT -->|CI/CD| DEPLOY[Deployment]
     DEPLOY -->|Loads| PLATFORM[Platform Runtime]
@@ -265,14 +267,16 @@ source:
 
 | Component | Technology | Purpose |
 |-----------|------------|---------|
-| **Schema Validation** | [JSON Schema](https://json-schema.org/) | Define and validate structure |
-| **YAML Parser** | [YamlDotNet](https://github.com/aaubry/YamlDotNet) (.NET) | Parse YAML to C# objects |
+| **Schema Validation** | [JSON Schema](https://json-schema.org/) | Define and validate structure (validates JSON representation) |
+| **YAML Parser** | [YamlDotNet](https://github.com/aaubry/YamlDotNet) (.NET) | Parse YAML → convert to JSON → validate |
 | **Linting** | [yaml-lint](https://www.yamllint.com/), VS Code YAML extension | Catch syntax errors |
 | **Version Control** | Git | Track changes, enable rollback |
 | **Environment Variables** | Syntax: `${env:VAR_NAME:default}` | Environment-specific values |
 | **Secrets** | Syntax: `${secret:SECRET_NAME}` | Secure credential management |
 
 #### JSON Schema for Validation
+
+**Note**: This JSON Schema validates the data structure, not the YAML syntax. During validation, YAML is parsed into an object structure and converted to JSON, which is then validated against this schema.
 
 ```json
 {
